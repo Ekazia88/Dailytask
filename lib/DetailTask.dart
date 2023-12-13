@@ -1,30 +1,18 @@
 
 
+import 'package:dailytask_app/AuthController.dart';
 import 'package:dailytask_app/ItemCrud.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:get/get.dart';  
+import 'package:get/get.dart';
+
+import 'Userdata.dart';  
 class DailyTaskPage extends StatefulWidget {
   @override
   _DailyTaskPageState createState() => _DailyTaskPageState();
 }
 
 class _DailyTaskPageState extends State<DailyTaskPage> {
-  // List<TaskItemModel> taskItems = [
-  //   TaskItemModel(
-  //     taskTitle: 'Task 1',
-  //     taskDescription: 'Description for Task 1',
-  //     taskDate: '2023-12-10',
-  //     isTaskCompleted: true,
-  //   ),
-  //   TaskItemModel(
-  //     taskTitle: 'Task 2',
-  //     taskDescription: 'Description for Task 2',
-  //     taskDate: '2023-12-11',
-  //     isTaskCompleted: false,
-  //   ),
-  //   // Add more tasks as needed
-  // ];
 
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
@@ -35,7 +23,8 @@ class _DailyTaskPageState extends State<DailyTaskPage> {
   int _editingIndex = -1;
 
   final itemrepo = Get.put(itemRepo());
-
+  final auth = Get.put(AuthController());
+  final controller = Get.put(user());
   Future<void> _selectDate(BuildContext context) async {
     DateTime selectedDate = DateTime.now();
 
@@ -58,7 +47,9 @@ class _DailyTaskPageState extends State<DailyTaskPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context){
+    
+    Usermodel? userx = controller.userdata();
     return Scaffold(
       appBar: AppBar(
         title: Text('Daily Tasks'),
@@ -74,26 +65,30 @@ class _DailyTaskPageState extends State<DailyTaskPage> {
             ),
             SizedBox(height: 8.0),
             Expanded(
-              child: FutureBuilder<List<TaskItemModel>>(
-                future: itemrepo.allitem(),
+              child: 
+              FutureBuilder<List<TaskItemModel>>(
+                future: itemrepo.allitem(auth.firebaseUser.value!.uid),
                 builder: (context,snapshot){
                   if(snapshot.connectionState == ConnectionState.waiting){
                     return Center(child: CircularProgressIndicator());
                   }else if(snapshot.hasError){
-                    return Text("Error: ${snapshot.error}");
+                    print(snapshot.error);
+                    return Text("Error1: ${snapshot.error}");
                   }else{
-               return ListView.builder(
+               return
+               ListView.builder(
                 shrinkWrap: true,
                 itemCount: snapshot.data!.length,
                 itemBuilder: (context, index) {
                   TaskItemModel task = snapshot.data![index];
-                  return TaskItem(
+                  return 
+                  TaskItem(
                     taskItem: snapshot.data![index],
                     onEdit: () {
-                      _editTask(index,task);
+                      _editTask(index,task,auth.firebaseUser.value!.uid);
                     },
                     onDelete: () {
-                      _deleteTask(task);
+                      _deleteTask(task,auth.firebaseUser.value!.uid);
                     },
                   );
                 },
@@ -107,14 +102,14 @@ class _DailyTaskPageState extends State<DailyTaskPage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          _showTaskForm(context,null);
+          _showTaskForm(context,null,auth.firebaseUser.value!.uid);
         },
         child: Icon(Icons.add),
       ),
     );
   }
 
-  void _editTask(int index, TaskItemModel taskedit) async {
+  void _editTask(int index, TaskItemModel taskedit,String uid) async {
     setState(() {
       _isEditing = true;
       _editingIndex = index;
@@ -126,19 +121,19 @@ class _DailyTaskPageState extends State<DailyTaskPage> {
       _isCompleted = task.isTaskCompleted;
     });
      String? id = taskedit.id;
-    _showTaskForm(context,id);
+    _showTaskForm(context,id,uid);
   }
 
-  void _deleteTask(TaskItemModel idx) {
+  void _deleteTask(TaskItemModel idx,String uid) {
     setState(() {
-      deletetask(idx);
+      deletetask(idx,uid);
     });
   }
-  Future<void> deletetask(TaskItemModel dailyTaskModel) async{
-    await itemrepo.deleteTask(dailyTaskModel);
+  Future<void> deletetask(TaskItemModel dailyTaskModel,String uid) async{
+    await itemrepo.deleteTask(dailyTaskModel,uid);
   }
 
-  void _addTask() {
+  void _addTask(String uid) {
     TaskItemModel newTask = TaskItemModel(
       taskTitle: _titleController.text,
       taskDescription: _descriptionController.text,
@@ -147,14 +142,14 @@ class _DailyTaskPageState extends State<DailyTaskPage> {
     );  
 
     setState(() {
-      _addFirestore(newTask);
+      _addFirestore(newTask,uid);
     });
   }
-   Future<void> _addFirestore(TaskItemModel dailyTaskModel) async {
-    await itemrepo.CreateData(dailyTaskModel);
+   Future<void> _addFirestore(TaskItemModel dailyTaskModel,String uid) async {
+    await itemrepo.CreateData(dailyTaskModel,uid);
     
   }
-  void _updateTask(String id) {
+  void _updateTask(String id,String uid) {
     TaskItemModel updatedTask = TaskItemModel(
       id: id,
       taskTitle: _titleController.text,
@@ -164,13 +159,13 @@ class _DailyTaskPageState extends State<DailyTaskPage> {
     );
 
     setState(() {
-     updatefirestore(updatedTask);
+     updatefirestore(updatedTask,uid);
     });
     
     _clearForm();
   }
-Future<void> updatefirestore(TaskItemModel dailyTaskModel) async{
-      await itemrepo.updateTask(dailyTaskModel);
+Future<void> updatefirestore(TaskItemModel dailyTaskModel,String uid) async{
+      await itemrepo.updateTask(dailyTaskModel,uid);
     }
   void _clearForm() {
     setState(() {
@@ -184,57 +179,70 @@ Future<void> updatefirestore(TaskItemModel dailyTaskModel) async{
     });
   }
 
-  void _showTaskForm(BuildContext context,String? id) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
+ void _showTaskForm(BuildContext context, String? id, String uid) {
+  showDialog(
+    context: context,
+    builder: (context) {
+      final screenHeight = MediaQuery.of(context).size.height;
+
+      return 
+        AlertDialog(
           title: Text(_isEditing ? 'Edit Task' : 'Add Task'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _titleController,
-                decoration: InputDecoration(labelText: 'Title'),
-              ),
-              TextField(
-                controller: _descriptionController,
-                decoration: InputDecoration(labelText: 'Description'),
-              ),
-              Row(
+          content: SingleChildScrollView(
+            child:
+          Container(
+            height: screenHeight * 0.4,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _dateController,
-                      decoration: InputDecoration(labelText: 'Date (YYYY-MM-DD)'),
-                      readOnly: true,
-                      onTap: () {
-                        _selectDate(context);
-                      },
-                    ),
+                  TextField(
+                    controller: _titleController,
+                    decoration: InputDecoration(labelText: 'Title'),
                   ),
-                  IconButton(
-                    icon: Icon(Icons.calendar_today),
-                    onPressed: () {
-                      _selectDate(context);
-                    },
+                  TextField(
+                    controller: _descriptionController,
+                    decoration: InputDecoration(labelText: 'Description'),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            _selectDate(context);
+                          },
+                          child: TextField(
+                            controller: _dateController,
+                            decoration: InputDecoration(labelText: 'Date (YYYY-MM-DD)'),
+                            readOnly: true,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.calendar_today),
+                        onPressed: () {
+                          _selectDate(context);
+                        },
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Text('Completed:'),
+                      Checkbox(
+                        value: _isCompleted,
+                        onChanged: (value) {
+                          setState(() {
+                            _isCompleted = value ?? false;
+                          });
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
-              Row(
-                children: [
-                  Text('Completed:'),
-                  Checkbox(
-                    value: _isCompleted,
-                    onChanged: (value) {
-                      setState(() {
-                        _isCompleted = value ?? false;
-                      });
-                    },
-                  ),
-                ],
-              ),
-            ],
+            )
+            ),
           ),
           actions: [
             TextButton(
@@ -246,14 +254,12 @@ Future<void> updatefirestore(TaskItemModel dailyTaskModel) async{
             ),
             ElevatedButton(
               onPressed: () async {
-                
                 Navigator.pop(context);
 
                 if (_isEditing) {
-                  
-                  _updateTask(id!);
+                  _updateTask(id!, uid);
                 } else {
-                  _addTask();
+                  _addTask(uid);
                 }
 
                 _clearForm();
@@ -261,10 +267,13 @@ Future<void> updatefirestore(TaskItemModel dailyTaskModel) async{
               child: Text(_isEditing ? 'Save Changes' : 'Add Task'),
             ),
           ],
-        );
-      },
-    );
-  }
+      );
+    },
+  );
+}
+
+
+
 }
 
 class TaskItem extends StatelessWidget {
